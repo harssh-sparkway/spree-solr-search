@@ -51,12 +51,13 @@ module Spree::Search
         :page => page, 
         :per_page => per_page
       }
+      search_options.merge!({:sort => sort_option}) unless sort_option.blank?
 
       result = Spree::Product.find_by_solr(query || '', search_options)
 
-      @count = result.total
-      @properties[:total_entries] = @count
-      products = Kaminari.paginate_array(result.records, :total_count => @count).page(page).per(per_page)
+      @properties[:total_entries] = result.total
+      products = result.records #Kaminari.paginate_array(result.records, :total_count => @count).page(page).per(per_page)
+      ids = products.map(&:id)
       @properties[:products] = products
 
       @properties[:suggest] = nil
@@ -69,7 +70,7 @@ module Spree::Search
       end
 
       @properties[:available_facets] = parse_facets_hash(result.facets)
-      Spree::Product.where("spree_products.id" => products.map(&:id))
+      reorder(Spree::Product.where("spree_products.id" => ids), ids)
     end
 
     def prepare(params)
@@ -83,6 +84,16 @@ module Spree::Search
     end
     
     private
+
+    # Reorders the instances keeping the order returned from Solr
+    def reorder(objects, ids)
+      ordered_objects = []
+      ids.each do |id|
+        object = objects.find{ |t| t.id.to_s == id.to_s }
+        ordered_objects |= [object] if object
+      end
+      ordered_objects
+    end
     
     def parse_facets_hash(facets_hash = {"facet_fields" => {}})
       facets = []
